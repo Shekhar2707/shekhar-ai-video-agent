@@ -1,0 +1,47 @@
+version: '3.9'
+
+services:
+  shekarai:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: shekarai-agent
+    restart: unless-stopped
+    ports:
+      - "4000:4000"
+    environment:
+      - NODE_ENV=production
+    env_file:
+      - .env
+    volumes:
+      - shekarai_output:/var/www/shekarai/output
+      - shekarai_music:/var/www/shekarai/music
+      - /tmp/shekarai:/tmp/shekarai
+    deploy:
+      resources:
+        limits:
+          memory: 1536M        # Hard cap: 1.5 GB
+          cpus: '1.2'          # Max 1.2 of 2 cores
+    networks:
+      - shekarai_net
+    depends_on:
+      - mongo
+
+  mongo:
+    image: mongo:7.0
+    container_name: shekarai-mongo
+    restart: unless-stopped
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - shekarai_net
+    # NOT exposed externally — internal only
+
+volumes:
+  shekarai_output:
+  shekarai_music:
+  mongo_data:
+
+networks:
+  shekarai_net:
+    driver: bridge

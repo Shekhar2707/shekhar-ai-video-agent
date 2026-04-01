@@ -1,0 +1,22 @@
+node_modules/
+.env
+/tmp/
+/output/
+/music/
+*.log
+logs/
+dist/
+.DS_Store
+*.mp4
+*.mp3
+*.wav
+*.srt
+*.png
+*.jpg
+*.jpeg
+# Keep assets folder tracked but not media files
+assets/*.mp3
+assets/*.wav
+assets/*.mp4
+credentials.json
+token.json

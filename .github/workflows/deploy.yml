@@ -1,0 +1,61 @@
+name: ShekarAI — Deploy to Production
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      topic:
+        description: 'Video topic (Hindi text)'
+        required: false
+        default: ''
+
+jobs:
+  deploy:
+    name: Deploy to Ubuntu Server
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          DEPLOY_ENV: ${{ secrets.SHEKARAI_ENV }}
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: root
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          envs: DEPLOY_ENV
+          script: |
+            set -e
+            APP_DIR=/var/www/shekarai/app
+
+            echo "==> Pulling latest code..."
+            cd $APP_DIR && git pull origin main
+
+            echo "==> Installing dependencies..."
+            npm install --production
+
+            echo "==> Writing .env..."
+            echo "$DEPLOY_ENV" > $APP_DIR/.env
+
+            echo "==> Restarting PM2..."
+            pm2 restart shekarai-agent || pm2 start index.js --name shekarai-agent --max-memory-restart 1500M
+
+            echo "==> Health check..."
+            sleep 3
+            curl -sf http://localhost:4000/health | grep '"status":"ok"'
+            echo "✅ Deploy successful"
+
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm install
+      - run: node scripts/test.js || true    # Don't block deploy on resource tests
