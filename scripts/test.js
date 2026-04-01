@@ -13,14 +13,9 @@ const config = require('../config/config');
 
 let passed = 0, failed = 0;
 
-function test(name, fn) {
+async function test(name, fn) {
   try {
-    const result = fn();
-    if (result instanceof Promise) {
-      return result
-        .then(() => { console.log(`  ✅ ${name}`); passed++; })
-        .catch(e => { console.log(`  ❌ ${name}: ${e.message}`); failed++; });
-    }
+    await fn();
     console.log(`  ✅ ${name}`);
     passed++;
   } catch (e) {
@@ -36,59 +31,60 @@ async function run() {
 
   // Test 1: Config
   console.log('📋 1. Config Tests');
-  test('Config loads without error', () => { require('../config/config'); });
-  test('TEMP_DIR configured', () => { if (!config.paths.temp) throw new Error('not set'); });
-  test('OUTPUT_DIR configured', () => { if (!config.paths.output) throw new Error('not set'); });
+  await test('Config loads without error', () => { require('../config/config'); });
+  await test('TEMP_DIR configured', () => { if (!config.paths.temp) throw new Error('not set'); });
+  await test('OUTPUT_DIR configured', () => { if (!config.paths.output) throw new Error('not set'); });
 
-  // Test 2: FFmpeg
-  console.log('\n🎬 2. FFmpeg Tests');
-  test('FFmpeg installed', () => {
+  // Test 2: FFmpeg (server-side tools - expected to fail on Windows dev machine)
+  console.log('\n🎬 2. FFmpeg Tests  [NOTE: Required on Ubuntu server, not Windows]');
+  await test('FFmpeg installed', () => {
     const out = execSync('ffmpeg -version 2>&1').toString();
-    if (!out.includes('ffmpeg version')) throw new Error('FFmpeg not found');
+    if (!out.includes('ffmpeg version')) throw new Error('Not installed - run: apt install ffmpeg on server');
   });
-  test('FFprobe installed', () => {
+  await test('FFprobe installed', () => {
     execSync('ffprobe -version 2>&1');
   });
 
-  // Test 3: Python + gTTS
-  console.log('\n🐍 3. Python / gTTS Tests');
-  test('Python3 installed', () => {
+  // Test 3: Python + gTTS (server-side - may not be on Windows)
+  console.log('\n🐍 3. Python / gTTS Tests  [NOTE: pip3 install gtts needed on server]');
+  await test('Python installed', () => {
     execSync(`${config.tts.python} --version 2>&1`);
   });
-  test('gTTS module available', () => {
+  await test('gTTS module available', () => {
     execSync(`${config.tts.python} -c "import gtts" 2>&1`);
   });
 
   // Test 4: Resources
   console.log('\n💻 4. Resource Tests');
   await test('Resource monitor works', async () => {
-    const status = await ResourceMonitor.getStatus();
-    if (!status.ram || !status.cpu) throw new Error('Missing fields');
-    console.log(`     RAM available: ${status.ram.availableMB}MB | CPU load: ${status.cpu.currentLoadPercent}%`);
+    const mem = await require('../config/resources').getStatus();
+    if (!mem.ram || !mem.cpu) throw new Error('Missing fields');
+    console.log(`     RAM available: ${mem.ram.availableMB}MB | CPU: ${mem.cpu.currentLoadPercent}% load | Cores: ${mem.cpu.cores}`);
   });
-  await test('Server has enough RAM for a job', async () => {
-    const status = await ResourceMonitor.getStatus();
+  await test('RAM check (Server needs 2GB+ free)', async () => {
+    const mem = await require('../config/resources').getStatus();
     const needed = config.processing.maxRamMB + config.processing.reservedBufferMB;
-    if (status.ram.availableMB < needed)
-      throw new Error(`Only ${status.ram.availableMB}MB available, need ${needed}MB`);
+    console.log(`     Needed: ${needed}MB | Available: ${mem.ram.availableMB}MB`);
+    if (mem.ram.availableMB < needed)
+      throw new Error(`Need ${needed}MB free, only ${mem.ram.availableMB}MB available (OK on local Windows dev)`);
   });
 
   // Test 5: Directories
   console.log('\n📁 5. Directory Tests');
-  test('Temp dir creatable', () => {
+  await test('Temp dir creatable', () => {
     const p = path.join(config.paths.temp, 'test_' + Date.now());
     fs.mkdirSync(p, { recursive: true });
     fs.rmdirSync(p);
   });
-  test('Output dir exists or creatable', () => {
+  await test('Output dir creatable', () => {
     fs.mkdirSync(config.paths.output, { recursive: true });
   });
 
-  // Test 6: OpenAI (optional)
-  console.log('\n🤖 6. OpenAI Tests');
-  test('OpenAI API key set in .env', () => {
-    if (!config.openai.apiKey || config.openai.apiKey.startsWith('sk-your'))
-      throw new Error('Set OPENAI_API_KEY in .env');
+  // Test 6: OpenAI key
+  console.log('\n🤖 6. OpenAI / API Tests');
+  await test('OpenAI API key set in .env', () => {
+    if (!config.openai.apiKey || config.openai.apiKey.startsWith('sk-placeholder'))
+      throw new Error('Replace OPENAI_API_KEY in .env with your real key');
   });
 
   console.log('\n══════════════════════════════════════════════');

@@ -11,10 +11,16 @@ class ResourceMonitor {
    * Returns current RAM and CPU stats
    */
   async getStatus() {
+    const withTimeout = (promise, fallback, ms = 4000) =>
+      Promise.race([
+        promise,
+        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), ms)),
+      ]).catch(() => fallback);
+
     const [mem, cpu, load] = await Promise.all([
-      si.mem(),
-      si.cpu(),
-      si.currentLoad(),
+      withTimeout(si.mem(), { total: 0, used: 0, available: 0, free: 0 }),
+      withTimeout(si.cpu(), { physicalCores: 2 }),
+      withTimeout(si.currentLoad(), { currentLoad: 0 }),
     ]);
 
     return {
